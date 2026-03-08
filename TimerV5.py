@@ -18,29 +18,37 @@ if uploaded_file:
 
     text = uploaded_file.read().decode("utf-8")
 
-    pattern = r"\[(.*?)\] (.*?): (.*)"
-
     data = []
 
     for line in text.splitlines():
-
-        match = re.match(pattern, line)
-
+        # Try standard WhatsApp format first: [DD/MM/YYYY, HH:MM:SS AM/PM] Sender: Message
+        match = re.match(r"\[(.*?)\] (.*?): (.*)", line)
+        
         if match:
-
             timestamp, sender, message = match.groups()
-
             try:
                 time_obj = datetime.strptime(timestamp, "%d/%m/%Y, %I:%M:%S %p")
-
                 data.append({
                     "time": time_obj,
                     "sender": sender,
                     "message": message
                 })
-
             except:
                 continue
+        else:
+            # Try alternative format: YYYY/MM/DD HH:MM - Sender: Message
+            match = re.match(r"(\d{4}/\d{2}/\d{2} \d{2}:\d{2}) - (.*?): (.*)", line)
+            if match:
+                timestamp, sender, message = match.groups()
+                try:
+                    time_obj = datetime.strptime(timestamp, "%Y/%m/%d %H:%M")
+                    data.append({
+                        "time": time_obj,
+                        "sender": sender,
+                        "message": message
+                    })
+                except:
+                    continue
 
     df = pd.DataFrame(data)
 
@@ -72,6 +80,10 @@ if uploaded_file:
             })
 
     reply_df = pd.DataFrame(reply_data)
+
+    if reply_df.empty:
+        st.warning("No reply interactions detected. This might happen if all messages are from the same sender or if the chat format isn't recognized.")
+        st.stop()
 
     threshold_seconds = threshold_minutes * 60
     reply_df["within_threshold"] = reply_df["reply_seconds"] <= threshold_seconds
